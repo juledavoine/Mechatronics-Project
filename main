@@ -57,26 +57,26 @@ uint16_t measure_distance() {
 
 int main(void)
 {
-   //Set PB0 and PB1 to output pins and set them high so the LEDS start in the off position
-   DDRB = 0b00000011;
-   PORTB = 0b00000011;
-   
-   //Set PC0 to input for switch and PD4-PD7 to outputs for the H-Bridge
+
+   init_ultrasonic();
+
+   //Set PD4-PD7 to outputs for the H-Bridge
    DDRD = 0b11110000;
    
    //Set PC0 to input for switch
    DDRC = 0b00000000;
       
     while (1) 
-    {
-		while (PINC & 0b00000001) //Permanent loop to run until button is pressed
-		{
-						
-		}
+    {	
+	uint16_t distance = measure_distance();
+	if (distance < 4) {
 		open();
 		wait(2000);
 		close();
 		wait(2000);
+	} 
+else {}
+
     }
 }
 
