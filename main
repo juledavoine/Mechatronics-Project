@@ -5,113 +5,43 @@
  * Author : Matthew Houston
  */ 
 
+#define F_CPU 16000000UL  // Define the clock frequency (16 MHz)
 #include <avr/io.h>
-#include <util/delay.h>
+#include <util/delay.h>  // Include delay library
 
-#define TRIG PB0
-#define ECHO PB1
-#define LED PB2
-
-#define FREQ_CLK 8000000
-
-// Motor Functions
-void wait(volatile int number_of_msec);
 void open();
 void close();
 void motion3();
+void trigger();
+uint16_t echo();
 
-//Ultrasonic Sensor Functions
-void init_ultrasonic() {
-	DDRB |= (1 << TRIG);  // Set TRIG as output
-	DDRB &= ~(1 << ECHO); // Set ECHO as input
-	DDRB |= (1 << LED);   // Set LED as output
-}
-
-uint16_t measure_distance() {
-	uint16_t duration, distance;
-	
-	// Send trigger pulse
-	PORTB &= ~(1 << TRIG);
-	_delay_us(2);
-	PORTB |= (1 << TRIG);
-	_delay_us(10);
-	PORTB &= ~(1 << TRIG);
-	
-	// Measure echo pulse width
-	while (!(PINB & (1 << ECHO))); // Wait for ECHO to go HIGH
-	TCNT1 = 0;
-	TCCR1B |= (1 << CS11); // Start Timer1 with prescaler 8
-	while (PINB & (1 << ECHO)); // Wait for ECHO to go LOW
-	TCCR1B = 0; // Stop Timer1
-	
-	duration = TCNT1;
-	distance = (duration / 2) / 58; // Convert to cm
-	
-	if (distance >= 200 || distance == 50) {
-		return 0xFFFF; // Out of range
-	}
-	return distance;
-}
-
-//MAIN START
 
 int main(void)
 {
-
-   init_ultrasonic();
-
-   //Set PD4-PD7 to outputs for the H-Bridge
-   DDRD = 0b11110000;
+	DDRB = 0b00000001;      // PB0 (TRIG) and PB2 (LED) as output, PB1 (ECHO) input
+	
+	//Set PC0 to input for switch and PD4-PD7 to outputs for the H-Bridge
+	DDRD = 0b11110000;
    
-   //Set PC0 to input for switch
-   DDRC = 0b00000000;
-      
+	int uS;
+	int distance;
+	    
     while (1) 
-    {	
-	uint16_t distance = measure_distance();
-	if (distance < 4) {
+    {
+		trigger();               // Trigger the ultrasonic pulse
+		uS = echo();             // Measure echo duration
+		distance = uS / 58;      // Convert time to distance (cm)
+		
+		if (distance < 4)        // Object is very close
+		{
 		open();
-		wait(2000);
+		_delay_ms(1000);
 		close();
-		wait(2000);
-	} 
-else {}
-
+		_delay_ms(1000);
+		}
+		_delay_ms(100);  // Small delay before next trigger
     }
 }
-
-void wait(volatile int number_of_msec) //wait function from GitHub
-{
-	// This subroutine creates a delay equal to number_of_msec*T, where T is 1 msec
-	// It changes depending on the frequency defined by FREQ_CLK
-	char register_B_setting;
-	char count_limit;
-	
-	// Some typical clock frequencies:
-	switch(FREQ_CLK) {
-		case 16000000:
-		register_B_setting = 0b00000011; // this will start the timer in Normal mode with prescaler of 64 (CS02 = 0, CS01 = CS00 = 1).
-		count_limit = 250; // For prescaler of 64, a count of 250 will require 1 msec
-		break;
-		case 8000000:
-		register_B_setting =  0b00000011; // this will start the timer in Normal mode with prescaler of 64 (CS02 = 0, CS01 = CS00 = 1).
-		count_limit = 125; // for prescaler of 64, a count of 125 will require 1 msec
-		break;
-		case 1000000:
-		register_B_setting = 0b00000010; // this will start the timer in Normal mode with prescaler of 8 (CS02 = 0, CS01 = 1, CS00 = 0).
-		count_limit = 125; // for prescaler of 8, a count of 125 will require 1 msec
-		break;
-	}
-	
-	while (number_of_msec > 0) {
-		TCCR0A = 0x00; // clears WGM00 and WGM01 (bits 0 and 1) to ensure Timer/Counter is in normal mode.
-		TCNT0 = 0;  // preload value for testing on count = 250
-		TCCR0B =  register_B_setting;  // Start TIMER0 with the settings defined above
-		while (TCNT0 < count_limit); // exits when count = the required limit for a 1 msec delay
-		TCCR0B = 0x00; // Stop TIMER0
-		number_of_msec--;
-	}
-} // end wait()
 
 void close()
 {
@@ -121,13 +51,13 @@ void close()
 	for (int i = 0; i < steps; i++)
 	{
 		PORTD = 0b00010000;
-		wait(10);
+		_delay_ms(10);
 		PORTD = 0b01000000;
-		wait(10);
+		_delay_ms(10);
 		PORTD = 0b00100000;
-		wait(10);
+		_delay_ms(10);
 		PORTD = 0b10000000;
-		wait(10);
+		_delay_ms(10);
 	}
 	PORTB = 0b00000011;
 	PORTD = 0b00000000;
@@ -140,15 +70,39 @@ void open()
 	for (int i = 0; i < steps; i++)
 	{
 		PORTD = 0b10000000;
-		wait(10);
+		_delay_ms(10);
 		PORTD = 0b00100000;
-		wait(10);
+		_delay_ms(10);
 		PORTD = 0b01000000;
-		wait(10);
+		_delay_ms(10);
 		PORTD = 0b00010000;
-		wait(10);
+		_delay_ms(10);
 	}
 	PORTB = 0b00000011;
 	PORTD = 0b00000000;
 }
 
+// Function to send a trigger pulse to the sensor
+void trigger()
+{
+	PORTB |= 0b00000001;   // Set PB0 high to activate the trigger
+	_delay_us(65);         // Datasheet recommended wait time for trigger pulse
+	PORTB &= ~0x01;        // Reset PB0 (low)
+}
+
+// Function to measure echo pulse duration
+uint16_t echo()
+{
+	// Wait for ECHO to go HIGH (signal received)
+	while ((PINB & 0b00000010) == 0);
+
+	// Measure how long the ECHO stays HIGH
+	uint16_t count = 0;
+	while ((PINB & 0b00000010) != 0) {
+		_delay_us(1);  // Wait 1 microsecond
+		count++;       // Count the duration
+		if (count > 30000) break; // Timeout safety
+	}
+
+	return count;
+}
