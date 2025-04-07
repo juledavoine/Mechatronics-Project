@@ -1,0 +1,63 @@
+/*
+ * NewSensor.c
+ *
+ * Created: 4/3/2025 12:37:57 AM
+ * Author : Juliette Davoine
+ */ 
+
+#include <avr/io.h>
+#include <util/delay.h>
+
+#define TRIG PB0
+#define ECHO PB1
+#define LED PB2
+
+void init_ultrasonic() {
+	DDRB |= (1 << TRIG);  // Set TRIG as output
+	DDRB &= ~(1 << ECHO); // Set ECHO as input
+	DDRB |= (1 << LED);   // Set LED as output
+}
+
+uint16_t measure_distance() {
+	uint16_t duration, distance;
+	
+	// Send trigger pulse
+	PORTB &= ~(1 << TRIG);
+	_delay_us(2);
+	PORTB |= (1 << TRIG);
+	_delay_us(10);
+	PORTB &= ~(1 << TRIG);
+	
+	// Measure echo pulse width
+	while (!(PINB & (1 << ECHO))); // Wait for ECHO to go HIGH
+	TCNT1 = 0;
+	TCCR1B |= (1 << CS11); // Start Timer1 with prescaler 8
+	while (PINB & (1 << ECHO)); // Wait for ECHO to go LOW
+	TCCR1B = 0; // Stop Timer1
+	
+	duration = TCNT1;
+	distance = (duration / 2) / 58; // Convert to cm
+	
+	if (distance >= 200 || distance == 50) {
+		return 0xFFFF; // Out of range
+	}
+	return distance;
+}
+
+int main() {
+	init_ultrasonic();
+	
+	while (1) {
+		uint16_t distance = measure_distance();
+		
+		if (distance < 4) {
+			PORTB |= (1 << LED); // Turn LED on
+			} else {
+			PORTB &= ~(1 << LED); // Turn LED off
+		}
+		
+		_delay_ms(500);
+	}
+}
+
+
