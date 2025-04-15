@@ -8,6 +8,8 @@
 #define F_CPU 16000000UL  // Define the clock frequency (16 MHz)
 #include <avr/io.h>
 #include <util/delay.h>  // Include delay library
+#include <avr/interrupt.h> //Include Interrupt library
+
 
 void open();
 void close();
@@ -15,13 +17,28 @@ void motion3();
 void trigger();
 uint16_t echo();
 
+ISR(INT0_vect)
+{
+	open();
+	_delay_ms(1500);
+	close();
+	_delay_ms(1000);
+	
+}
 
 int main(void)
 {
 	DDRB = 0b00000001;      // PB0 (TRIG) and PB2 (LED) as output, PB1 (ECHO) input
-	
-	//Set PC0 to input for switch and PD4-PD7 to outputs for the H-Bridge
-	DDRD = 0b11110000;
+	DDRD = 0b11110000;		//Set PC0 to input for switch and PD4-PD7 to outputs for the H-Bridge
+   
+	DDRC = 0b00100000;
+	PORTC = 0b00000000;
+   
+	//Setup and activate Interrupt Service registers
+	EICRA = 0b00001111;
+	EIMSK = 0b00000001;
+	sei();
+
    
 	int uS;
 	int distance;
@@ -32,12 +49,11 @@ int main(void)
 		uS = echo();             // Measure echo duration
 		distance = uS / 58;      // Convert time to distance (cm)
 		
-		if (distance < 4)        // Object is very close
+		if (distance < 4)        
 		{
-		open();
-		_delay_ms(1000);
-		close();
-		_delay_ms(1000);
+			PORTC = 0b00100000;
+			_delay_ms(50);
+			PORTC = 0b00000000;
 		}
 		_delay_ms(100);  // Small delay before next trigger
     }
@@ -46,7 +62,7 @@ int main(void)
 void close()
 {
 	
-	int steps = 11; // steps = degree of rotations / 1.8 * 4
+	int steps = 12; // steps = degree of rotations / 1.8 * 4
 	PORTB = 0b00000001;
 	for (int i = 0; i < steps; i++)
 	{
@@ -65,7 +81,7 @@ void close()
 
 void open()
 {
-	int steps = 11;
+	int steps = 12;
 	PORTB = 0b00000010;
 	for (int i = 0; i < steps; i++)
 	{
