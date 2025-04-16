@@ -17,18 +17,40 @@ void motion3();
 void trigger();
 uint16_t echo();
 
+int send_to_MAX7221(unsigned char command, unsigned char data);
+int32_t HX711_read(void);
+
 ISR(INT0_vect)
 {
 	open();
-	_delay_ms(1500);
+	//start countdown until lid closes
+	
+	send_to_MAX7221(0x01,0x03); // display 3
+	
+	_delay_ms(500);
+	
+	send_to_MAX7221(0x01,0x02); // display 2
+	
+	_delay_ms(500);
+	
+	send_to_MAX7221(0x01, 0x01); // display 1
+	
+	_delay_ms(500);
+	
+	send_to_MAX7221(0x01, 0x0F); //blank indefinitely until lid opens back up again
+	
 	close();
-	_delay_ms(1000);
+	_delay_ms(100);
 	
 }
 
+
+
+
+
 int main(void)
 {
-	DDRB = 0b00000001;      // PB0 (TRIG) and PB2 (LED) as output, PB1 (ECHO) input
+	DDRB = 0b00101101;      // PB0 (TRIG) output, PB1 (ECHO) input and set pins SCK, MOSI, and SS as output
 	DDRD = 0b11110000;		//Set PC0 to input for switch and PD4-PD7 to outputs for the H-Bridge
    
 	DDRC = 0b00100000;
@@ -39,9 +61,22 @@ int main(void)
 	EIMSK = 0b00000001;
 	sei();
 
+	// Set up Main SPI
+	SPCR = 0b01010001;
+	
+	//Setup the MAX chip for 7 segment display
+	send_to_MAX7221(0x09, 0b00000001); // enable decoding only for digit 1
+	send_to_MAX7221(0x0B, 0x00);       // scan limit: only digit 0
+	send_to_MAX7221(0x0C, 0x01);       // turn on the chip
+   
+	// Set up PC4 as input (DT) and PC3 as output (SCK)
+	DDRC &= ~(1 << PC4);    // PC4 (DT) as input
+	DDRC |= (1 << PC3);     // PC3 (SCK) as output
+	PORTC &= ~(1 << PC3);   // Make sure PC3 (SCK) is low initially
    
 	int uS;
 	int distance;
+	int weight;
 	    
     while (1) 
     {
@@ -56,6 +91,14 @@ int main(void)
 			PORTC = 0b00000000;
 		}
 		_delay_ms(100);  // Small delay before next trigger
+		weight = HX711_read();
+		if (weight > 200)
+		{
+			PORTC = 0b00100000;
+			_delay_ms(50);
+			PORTC = 0b00000000;
+			
+		}
     }
 }
 
@@ -121,4 +164,53 @@ uint16_t echo()
 	}
 
 	return count;
+}
+
+int send_to_MAX7221(unsigned char command, unsigned char data)
+{
+	PORTB = PORTB & 0b11111011; // Clear PB2, which is the SS bit, so that
+	// transmission can begin
+	SPDR = command; // Send command
+	while(!(SPSR & (1<<SPIF))); // Wait for transmission to finish
+	
+	SPDR = data; // Send data
+	while(!(SPSR & (1<<SPIF))); // Wait for transmission to finish
+	PORTB = PORTB | 0b00000100; // Return PB2 to 1, which is the SS bit, to end
+	// transmission
+	return 0;
+}
+
+int32_t HX711_read() {
+	int32_t count = 0;
+
+	// Wait for DT (PC4) to go LOW, indicating new data is ready
+	while (PINC & (1 << PC4));  // Wait until DT goes low
+
+	// Read 24 bits from HX711
+	for (uint8_t i = 0; i < 24; i++) {
+		PORTC |= (1 << PC3);  // Set SCK (PC3) high
+		_delay_us(1);         // Short delay
+		count = count << 1;   // Shift left to make space for the new bit
+
+		// If DT (PC4) is high, set the least significant bit
+		if (PINC & (1 << PC4)) {
+			count++;  // Add 1 if DT is high
+		}
+
+		PORTC &= ~(1 << PC3);  // Set SCK (PC3) low
+		_delay_us(1);          // Short delay
+	}
+
+	// Pulse SCK (PC3) one more time to set the gain to 128
+	PORTC |= (1 << PC3);    // Set SCK high
+	_delay_us(1);           // Short delay
+	PORTC &= ~(1 << PC3);   // Set SCK low
+	_delay_us(1);           // Short delay
+
+	// Sign extend if the value is negative (check the MSB of 24 bits)
+	if (count & 0x800000) {
+		count |= 0xFF000000;  // If the MSB is 1, extend sign to 32 bits
+	}
+
+	return count;  // Return the 24-bit data as a signed 32-bit integer
 }
