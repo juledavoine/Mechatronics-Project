@@ -27,7 +27,7 @@ ISR(INT0_vect)
 	
 	send_to_MAX7221(0x01,0x03); // display 3
 	
-	_delay_ms(500);
+	_delay_ms(500); 
 	
 	send_to_MAX7221(0x01,0x02); // display 2
 	
@@ -60,11 +60,13 @@ ISR(INT1_vect)
 
 int main(void)
 {
-	DDRB = 0b00101101;      // PB0 (TRIG) output, PB1 (ECHO) input and set pins SCK, MOSI, and SS as output
-	DDRD = 0b11110001;		//Set PC0 to input for switch and PD4-PD7 to outputs for the H-Bridge
+	DDRB = 0b01101101;      // PB0 (TRIG) output, PB1 (ECHO) input and set pins SCK, MOSI, and SS as output
+	PORTB &= ~(1<<PB6);		//Clear PB6 to turn on indicator light
+	
+	DDRD = 0b11110001;		//PD4-PD7 to outputs for the H-Bridge
    
 	DDRC = 0b01100110; 
-	PORTC = 0b00000010;
+	PORTC = 0b00000010;		//Set PC1 to turn off full can led
    
 	//Setup and activate Interrupt Service registers
 	EICRA = 0b00001111;
@@ -84,7 +86,8 @@ int main(void)
 	DDRC |= (1 << PC3);     // PC3 (SCK) as output
 	PORTC &= ~(1 << PC3);   // Make sure PC3 (SCK) is low initially
    
-	int uS;
+	//Creation of variables for the input sensors
+	int uS; 
 	int distance;
 	int weight;
 	    
@@ -97,17 +100,17 @@ int main(void)
 		
 		if (distance < 4)        
 		{
-			PORTC |= (1 << PC5);  
+			PORTC |= (1 << PC5);	//Flash PC5 to use as a rising edge for INT0
 			_delay_ms(50);
-			PORTC &= ~(1 << PC5); 
+			PORTC &= ~(1 << PC5);	//Clear PC5 
 		}
 		_delay_ms(100);  // Small delay before next trigger
 		weight = HX711_read();
-		if (weight > 100)
+		if (weight > 15000)
 		{
-				PORTD |= (1 << PD0);
-				_delay_ms(50);
-				PORTD &= ~(1 << PD0);
+			PORTD |= (1 << PD0);	//Flash PD0 to use as rising edge for INT1
+			_delay_ms(50);
+			PORTD &= ~(1 << PD0);	//Clear PC5
 			
 		}
     }
@@ -117,7 +120,6 @@ void close()
 {
 	
 	int steps = 12; // steps = degree of rotations / 1.8 * 4
-	PORTB = 0b00000001;
 	for (int i = 0; i < steps; i++)
 	{
 		PORTD = 0b00010000;
@@ -136,7 +138,6 @@ void close()
 void open()
 {
 	int steps = 12;
-	PORTB = 0b00000010;
 	for (int i = 0; i < steps; i++)
 	{
 		PORTD = 0b10000000;
