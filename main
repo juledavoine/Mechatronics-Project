@@ -44,6 +44,16 @@ ISR(INT0_vect)
 	
 }
 
+ISR(INT1_vect)
+{
+	PORTC &= ~(1 << PC1);  // Set PC1 low for the LED to turn on
+	PORTC |= (1 << PC2);   // Set PC2 high to turn on the buzzer briefly
+	_delay_ms(500);
+	PORTC &= ~(1 << PC2);  // Set PC2 low to turn off the buzzer
+	while ((PINC & (1 << PC0))); // Stay in loop while button is not pressed (HIGH)
+	_delay_ms(20); // Debounce delay
+	PORTC |= (1 << PC1);   // Set PC1 high to turn off the LED
+}
 
 
 
@@ -51,14 +61,14 @@ ISR(INT0_vect)
 int main(void)
 {
 	DDRB = 0b00101101;      // PB0 (TRIG) output, PB1 (ECHO) input and set pins SCK, MOSI, and SS as output
-	DDRD = 0b11110000;		//Set PC0 to input for switch and PD4-PD7 to outputs for the H-Bridge
+	DDRD = 0b11110001;		//Set PC0 to input for switch and PD4-PD7 to outputs for the H-Bridge
    
-	DDRC = 0b00100000;
-	PORTC = 0b00000000;
+	DDRC = 0b01100110; 
+	PORTC = 0b00000010;
    
 	//Setup and activate Interrupt Service registers
 	EICRA = 0b00001111;
-	EIMSK = 0b00000001;
+	EIMSK = 0b00000011;
 	sei();
 
 	// Set up Main SPI
@@ -80,23 +90,24 @@ int main(void)
 	    
     while (1) 
     {
+		
 		trigger();               // Trigger the ultrasonic pulse
 		uS = echo();             // Measure echo duration
 		distance = uS / 58;      // Convert time to distance (cm)
 		
 		if (distance < 4)        
 		{
-			PORTC = 0b00100000;
+			PORTC |= (1 << PC5);  
 			_delay_ms(50);
-			PORTC = 0b00000000;
+			PORTC &= ~(1 << PC5); 
 		}
 		_delay_ms(100);  // Small delay before next trigger
 		weight = HX711_read();
-		if (weight > 200)
+		if (weight > 100)
 		{
-			PORTC = 0b00100000;
-			_delay_ms(50);
-			PORTC = 0b00000000;
+				PORTD |= (1 << PD0);
+				_delay_ms(50);
+				PORTD &= ~(1 << PD0);
 			
 		}
     }
