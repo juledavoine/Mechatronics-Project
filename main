@@ -1,11 +1,10 @@
 /*
- * Stepper.c
+ * FinalProject.c
  *
  * Created: 2/26/2025 6:44:15 PM
- * Author : Matthew Houston
+ * Author : Juliette Davoine, Matthew Houston, Lily Armstrong
  */ 
 
-#define F_CPU 16000000UL  // Define the clock frequency (16 MHz)
 #include <avr/io.h>
 #include <util/delay.h>  // Include delay library
 #include <avr/interrupt.h> //Include Interrupt library
@@ -15,10 +14,10 @@ void open();
 void close();
 void motion3();
 void trigger();
-uint16_t echo();
 
+int echo();
 int send_to_MAX7221(unsigned char command, unsigned char data);
-int32_t HX711_read(void);
+int HX711_read(void);
 
 ISR(INT0_vect)
 {
@@ -27,15 +26,15 @@ ISR(INT0_vect)
 	
 	send_to_MAX7221(0x01,0x03); // display 3
 	
-	_delay_ms(500); 
+	_delay_ms(1000); 
 	
 	send_to_MAX7221(0x01,0x02); // display 2
 	
-	_delay_ms(500);
+	_delay_ms(1000);
 	
 	send_to_MAX7221(0x01, 0x01); // display 1
 	
-	_delay_ms(500);
+	_delay_ms(1000);
 	
 	send_to_MAX7221(0x01, 0x0F); //blank indefinitely until lid opens back up again
 	
@@ -82,9 +81,9 @@ int main(void)
 	send_to_MAX7221(0x0C, 0x01);       // turn on the chip
    
 	// Set up PC4 as input (DT) and PC3 as output (SCK)
-	DDRC &= ~(1 << PC4);    // PC4 (DT) as input
-	DDRC |= (1 << PC3);     // PC3 (SCK) as output
-	PORTC &= ~(1 << PC3);   // Make sure PC3 (SCK) is low initially
+	DDRC &= ~(1 << PC4);    // PC4 as input
+	DDRC |= (1 << PC3);     // PC3 as output
+	PORTC &= ~(1 << PC3);   // Set PC3 low initially
    
 	//Creation of variables for the input sensors
 	int uS; 
@@ -106,7 +105,7 @@ int main(void)
 		}
 		_delay_ms(100);  // Small delay before next trigger
 		weight = HX711_read();
-		if (weight > 15000)
+		if (weight > 8000)
 		{
 			PORTD |= (1 << PD0);	//Flash PD0 to use as rising edge for INT1
 			_delay_ms(50);
@@ -122,6 +121,7 @@ void close()
 	int steps = 12; // steps = degree of rotations / 1.8 * 4
 	for (int i = 0; i < steps; i++)
 	{
+		//Activate the H-Bridge for the stepper motor order
 		PORTD = 0b00010000;
 		_delay_ms(10);
 		PORTD = 0b01000000;
@@ -140,6 +140,7 @@ void open()
 	int steps = 12;
 	for (int i = 0; i < steps; i++)
 	{
+		//Activate the H-Bridge for the stepper motor order
 		PORTD = 0b10000000;
 		_delay_ms(10);
 		PORTD = 0b00100000;
@@ -158,11 +159,11 @@ void trigger()
 {
 	PORTB |= 0b00000001;   // Set PB0 high to activate the trigger
 	_delay_us(65);         // Datasheet recommended wait time for trigger pulse
-	PORTB &= ~0x01;        // Reset PB0 (low)
+	PORTB &= ~0x01;        // Reset PB0 low
 }
 
 // Function to measure echo pulse duration
-uint16_t echo()
+int echo()
 {
 	// Wait for ECHO to go HIGH (signal received)
 	while ((PINB & 0b00000010) == 0);
@@ -192,34 +193,34 @@ int send_to_MAX7221(unsigned char command, unsigned char data)
 	return 0;
 }
 
-int32_t HX711_read() {
-	int32_t count = 0;
+int HX711_read() {
+	int count = 0;
 
-	// Wait for DT (PC4) to go LOW, indicating new data is ready
-	while (PINC & (1 << PC4));  // Wait until DT goes low
+	// Wait for PC4 to go low which says theres new data
+	while (PINC & (1 << PC4));  
 
-	// Read 24 bits from HX711
-	for (uint8_t i = 0; i < 24; i++) {
+	// Read value from HX711
+	for (int i = 0; i < 24; i++) {
 		PORTC |= (1 << PC3);  // Set SCK (PC3) high
 		_delay_us(1);         // Short delay
 		count = count << 1;   // Shift left to make space for the new bit
 
-		// If DT (PC4) is high, set the least significant bit
+		// If PC4 is high, set the least significant bit
 		if (PINC & (1 << PC4)) {
 			count++;  // Add 1 if DT is high
 		}
 
-		PORTC &= ~(1 << PC3);  // Set SCK (PC3) low
+		PORTC &= ~(1 << PC3);  // Set PC3 low
 		_delay_us(1);          // Short delay
 	}
 
-	// Pulse SCK (PC3) one more time to set the gain to 128
+	// Pulse PC3 again to set the gain 
 	PORTC |= (1 << PC3);    // Set SCK high
 	_delay_us(1);           // Short delay
 	PORTC &= ~(1 << PC3);   // Set SCK low
 	_delay_us(1);           // Short delay
 
-	// Sign extend if the value is negative (check the MSB of 24 bits)
+	// Sign extend if the value is negative 
 	if (count & 0x800000) {
 		count |= 0xFF000000;  // If the MSB is 1, extend sign to 32 bits
 	}
